@@ -21,7 +21,7 @@ MemoryManager::MemoryManager(size_t sz)
     m_pRoot = new Node();
     m_pRoot->size = n;
     m_pRoot->addr = m_addr;
-    m_pRoot->pages = (n+r);
+    m_pRoot->pages = (n + r);
 }
 
 MemoryManager::~MemoryManager()
@@ -49,7 +49,7 @@ void* MemoryManager::allocate(size_t sz)
         *q = m;
         p = reinterpret_cast<void*>(reinterpret_cast<long>(p) + sizeof(long));
 
-        printf("p=: %p, %s() is called at %s:%d \n", p,  __func__, __FILE__, __LINE__);
+        printf("p= %p, %s() is called at %s:%d \n", p, __func__, __FILE__, __LINE__);
 
         return p;
     }
@@ -57,8 +57,9 @@ void* MemoryManager::allocate(size_t sz)
     return nullptr;
 }
 
-void MemoryManager::allocateMemory(Node* p, size_t sz, Node*& rt)
+void MemoryManager::allocateMemory(Node* p, size_t pages, Node*& rt)
 {
+
     if (!p || rt)
     {
         return;
@@ -66,10 +67,10 @@ void MemoryManager::allocateMemory(Node* p, size_t sz, Node*& rt)
 
     if (!p->leaf)
     {
-        // printf("%s() is called at %s:%d \n", __func__, __FILE__, __LINE__);
+        printf("pages:%d, %s() is called at %s:%d \n", (int)pages,  __func__, __FILE__, __LINE__);
 
-        allocateMemory(p->left, sz, rt);
-        allocateMemory(p->right, sz, rt);
+        allocateMemory(p->left, pages, rt);
+        allocateMemory(p->right, pages, rt);
     }
     else
     {
@@ -79,56 +80,62 @@ void MemoryManager::allocateMemory(Node* p, size_t sz, Node*& rt)
         }
         // printf("%s() is called at %s:%d \n", __func__, __FILE__, __LINE__);
         // split the node
-        int n = sz / m_PAGE_SIZE;
-        int r = sz % m_PAGE_SIZE;
-        r = r ? 1 : 0;
-        n = (n + r);
 
-        if (p->pages >  n )
+        if (p->pages > pages)
         {
+            printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
+                   (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
+
             rt = p;
-            splitNode(p, n);
+            splitNode(p, pages);
         }
     }
 }
 
 void MemoryManager::splitNode(Node* p, size_t n)
 {
-    if(!p || p->pages < n || p->pages <= 1)
+    if (!p || p->pages < n || p->pages <= 1)
     {
         return;
     }
+
+
     Node* left = new Node();
     Node* right = new Node();
-    left->pages = p->pages/2;
+    left->pages = p->pages / 2;
     right->pages = p->pages - left->pages;
 
     left->addr = p->addr;
-    right->addr = p->addr + left->addr*m_PAGE_SIZE;
+    right->addr = p->addr + left->addr * m_PAGE_SIZE;
     p->leaf = false;
+    p->used = true;
+    p->left = left;
+    p->right = right;
 
-    printf("Node is split into two sub nodes, %s() at %s:%d \n", __func__, __FILE__, __LINE__);
-    if(n== left->pages)
+    printf("pages: %d, Node is split into two sub nodes, left:%p, right:%p, %s() at %s:%d \n",
+           (int)p->pages, left, right, __func__, __FILE__, __LINE__);
+
+
+    if (n == left->pages)
     {
         left->used = true;
         return;
     }
 
-    if(n < left->pages)
+    if (n < left->pages)
     {
         splitNode(left, n);
     }
     else
     {
         left->used = true;
-        splitNode(right, n-left->pages);
+        splitNode(right, n - left->pages);
     }
-
 }
 void MemoryManager::deallocate(const void* ptr)
 {
     void* p = reinterpret_cast<void*>(reinterpret_cast<long>(ptr) - sizeof(long));
-    long *q = reinterpret_cast<long*>(p);
+    long* q = reinterpret_cast<long*>(p);
     size_t pages = *q;
 
     deallocateMemory(nullptr, m_pRoot, reinterpret_cast<long>(p), pages);
@@ -160,10 +167,10 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, long addr, size_t pages)
             assert(p->used);
             p->used = false;
 
-            if(pages > p->pages)
+            if (pages > p->pages)
             {
-                long addr = p->addr + p->pages*m_PAGE_SIZE;
-                if(pp)
+                long addr = p->addr + p->pages * m_PAGE_SIZE;
+                if (pp)
                 {
                     deallocateMemory(pp, pp->right, addr, pages - p->pages);
                 }
