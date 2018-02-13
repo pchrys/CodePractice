@@ -45,8 +45,8 @@ void* MemoryManager::allocate(size_t sz)
     if (pNode != nullptr)
     {
         void* p = reinterpret_cast<void*>(pNode->addr);
-        long* q = reinterpret_cast<long*>(p);
-        *q = m;
+        long q = reinterpret_cast<long>(p);
+        q = m;
         p = reinterpret_cast<void*>(reinterpret_cast<long>(p) + sizeof(long));
 
         printf("p= %p, %s() is called at %s:%d \n", p, __func__, __FILE__, __LINE__);
@@ -76,12 +76,14 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, Node*& rt)
     {
         if (p->used)
         {
+            printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
+                   (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
             return;
         }
         // printf("%s() is called at %s:%d \n", __func__, __FILE__, __LINE__);
         // split the node
 
-        if (p->pages > pages)
+        if (p->pages >= pages)
         {
             printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
                    (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
@@ -94,7 +96,7 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, Node*& rt)
 
 void MemoryManager::splitNode(Node* p, size_t n)
 {
-    if (!p || p->pages < n || p->pages <= 1)
+    if (!p || p->pages <= n || p->pages <= 1)
     {
         return;
     }
@@ -135,8 +137,8 @@ void MemoryManager::splitNode(Node* p, size_t n)
 void MemoryManager::deallocate(const void* ptr)
 {
     void* p = reinterpret_cast<void*>(reinterpret_cast<long>(ptr) - sizeof(long));
-    long* q = reinterpret_cast<long*>(p);
-    size_t pages = *q;
+    long q = reinterpret_cast<long>(p);
+    size_t pages = q;
 
     deallocateMemory(nullptr, m_pRoot, reinterpret_cast<long>(p), pages);
 }
