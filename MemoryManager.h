@@ -2,6 +2,29 @@
 #define MEMORY_MANAGER_H
 
 #include <mutex>
+#include <map>
+/**
+ * this is a class used to perform memory management.
+
+The idea is that we use a binary searech tree to manage the memory.
+The leaf node of the tree keeps track of memory usage. Internal nodes
+don't have those information.
+
+When we allocate new memory, we need first find an unused leaf node, and
+then check memory chunk size, if it is equal to the request size, then
+return the memory denoted by this node; if it is larger than the request
+size, we need equally split the current node into two sub notes, and check
+left sub nodes; if the requested size is equal to the left node, return; if
+it is smaller than the left node, continue recursively splitting left node;
+if it is larger then left node, then search right sub-node for remaing size;
+
+We skip unused leaf nodes which has less memory chunk than we request.
+
+*/
+
+
+//An imrpovement,
+
 class MemoryManager
 {
 private:
@@ -51,9 +74,9 @@ private:
 
     Node* m_pRoot;
     unsigned long m_addr;
-    size_t m_size;
     static const size_t m_PAGE_SIZE = 4096;
 
+    std::map<unsigned long, Node*> m_unusedNodes;
     std::recursive_mutex m_mutex;
 };
 
