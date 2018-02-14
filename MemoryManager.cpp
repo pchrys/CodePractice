@@ -22,8 +22,10 @@ MemoryManager::MemoryManager(size_t sz)
     m_addr = reinterpret_cast<unsigned long>(p);
     m_size = m;
 
-    m_pRoot = new Node();
-    m_pRoot->size = n;
+    void* q = malloc(sizeof(Node));
+    new(q) Node;
+
+    m_pRoot = reinterpret_cast<Node*>(q);
     m_pRoot->addr = m_addr;
     m_pRoot->pages = (n + r);
 }
@@ -114,8 +116,18 @@ void MemoryManager::splitNode(Node* p, size_t n)
 
     std::lock_guard<std::recursive_mutex> lg(m_mutex);
 
-    Node* left = new Node();
-    Node* right = new Node();
+    void* u = malloc(sizeof(Node));
+    void* v = malloc(sizeof(Node));
+
+    new (u) Node;
+    new (v) Node;
+    Node* left = reinterpret_cast<Node*>(u);
+    Node* right = reinterpret_cast<Node*>(v);
+
+    // Node* left = new Node();
+    // Node* right = new Node();
+
+
     left->pages = p->pages / 2;
     right->pages = p->pages - left->pages;
 
@@ -128,9 +140,9 @@ void MemoryManager::splitNode(Node* p, size_t n)
     p->right = right;
     p->addr = right->addr;
 
-    printf("pages: %5d, Node:%p is split into two sub nodes, left:%p(addr:%lx), right:%p(addr:%lx), %s() at %s:%d \n",
-           (int)p->pages, p,  left, left->addr,
-           right, right->addr, __func__, __FILE__, __LINE__);
+    // printf("pages: %5d, Node:%p is split into two sub nodes, left:%p(addr:%lx), right:%p(addr:%lx), %s() at %s:%d \n",
+    //        (int)p->pages, p,  left, left->addr,
+    //        right, right->addr, __func__, __FILE__, __LINE__);
 
     if (n == left->pages)
     {
@@ -153,8 +165,9 @@ void MemoryManager::deallocate(void* ptr)
     size_t pages = *q;
 
     deallocateMemory(nullptr, m_pRoot, reinterpret_cast<unsigned long>(p), pages);
-    printf("pages: %d,  p: %p,  %s() at %s:%d \n",
-           (int)pages, p,   __func__, __FILE__, __LINE__);
+
+    // printf("pages: %d,  p: %p,  %s() at %s:%d \n",
+    //        (int)pages, p,   __func__, __FILE__, __LINE__);
 }
 
 void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size_t pages)
@@ -207,63 +220,112 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
         p->leaf = true;
         p->used = false;
 
-        printf("two sub nodes are merged into one node, %s() at %s:%d \n",
-                __func__, __FILE__, __LINE__);
+        // printf("two sub nodes are merged into one node, %s() at %s:%d \n",
+        //         __func__, __FILE__, __LINE__);
 
-        delete p->left;
-        delete p->right;
+        p->left->~Node();
+        p->right->~Node();
+
+        free(p->left);
+        free(p->right);
     }
 }
 
+#if 1
+const int MEMORY_POOL_SIZE = 4096*1024*256;    //1G
+
+MemoryManager gMemoryManager(MEMORY_POOL_SIZE);
+void* operator new(size_t size)
+{
+    return gMemoryManager.allocate(size);
+}
+
+void* operator new[](size_t size)
+{
+    return gMemoryManager.allocate(size);
+}
+
+void operator delete(void* ptr)
+{
+    gMemoryManager.deallocate(ptr);
+}
+
+void operator delete[](void* ptr)
+{
+    gMemoryManager.deallocate(ptr);
+}
+#endif
+
+#define DEBUG
+//#undef DEBUG
 int main()
 {
-    int size = 4096 * 1024*256;
+    unsigned long size = 4096 * 1024*256;
+
     MemoryManager memManager(size);
 
     std::vector<void*> memVec;
     int n = 512;
     for (int i = 0; i < n; i++)
     {
+#ifdef DEBUG
         auto p = memManager.allocate(4096);
-        printf("memory address : %p \n", p);
+#else
+        auto p = malloc(4096);
+#endif
+        //printf("memory address : %p \n", p);
         memVec.push_back(p);
     }
 
     for (int i = 0; i < memVec.size(); i++)
     {
-        printf("memory address : %p \n", memVec[i]);
+        //printf("memory address : %p \n", memVec[i]);
     }
 
     for (int i = 0; i < memVec.size(); i++)
     {
         //printf("deallocate memory address : %p \n", memVec[i]);
+#ifdef DEBUG
         memManager.deallocate(memVec[i]);
+#else
+        free(memVec[i]);
+#endif
     }
 
+    memVec.clear();
 
     std::default_random_engine e;
     e.seed(1);
-    std::uniform_int_distribution<unsigned> u(1, 1024);
+    std::uniform_int_distribution<unsigned> u(1, 32);
 
-    int q = 500;
+    int q = 2000;
     for(int i = 0; i < q; i++)
     {
         unsigned int sz = u(e);
-        sz = sz*4096;
+        sz = sz*4096; //4096;
+#ifdef DEBUG
+        auto p = memManager.allocate(sz);
+#else
+        auto p = malloc(4096);
+#endif
 
-        auto p = memManager.allocate(4096);
         memVec.push_back(p);
 
     }
     for (int i = 0; i < memVec.size(); i++)
     {
-        printf("memory address : %p \n", memVec[i]);
+        //printf("memory address : %p \n", memVec[i]);
     }
 
     for (int i = 0; i < memVec.size(); i++)
     {
         //printf("deallocate memory address : %p \n", memVec[i]);
+#ifdef DEBUG
         memManager.deallocate(memVec[i]);
+#else
+        free(memVec[i]);
+#endif
     }
 
+    return 0;
 }
