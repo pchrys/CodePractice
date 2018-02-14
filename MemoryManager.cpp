@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cassert>
 #include <vector>
+#include <cstring>
 
 #include "MemoryManager.h"
 
@@ -15,7 +16,9 @@ MemoryManager::MemoryManager(size_t sz)
     int m = (n + r) * m_PAGE_SIZE;
 
     void* p = malloc(n);
-    m_addr = reinterpret_cast<long>(p);
+    memset(p, 0x0, n);
+
+    m_addr = reinterpret_cast<unsigned long>(p);
     m_size = m;
 
     m_pRoot = new Node();
@@ -32,7 +35,6 @@ MemoryManager::~MemoryManager()
 }
 void* MemoryManager::allocate(size_t sz)
 {
-    Node* pNode = nullptr;
     size_t sz1 = sz + sizeof(long);
 
     int n = sz1 / m_PAGE_SIZE;
@@ -40,14 +42,16 @@ void* MemoryManager::allocate(size_t sz)
     r = r ? 1 : 0;
     int m = (n + r);
 
-    allocateMemory(m_pRoot, m, pNode);
+    unsigned long addr = 0;
 
-    if (pNode != nullptr)
+    allocateMemory(m_pRoot, m, addr);
+
+    if (addr != 0)
     {
-        void* p = reinterpret_cast<void*>(pNode->addr);
-        long q = reinterpret_cast<long>(p);
-        q = m;
-        p = reinterpret_cast<void*>(reinterpret_cast<long>(p) + sizeof(long));
+        void* p = reinterpret_cast<void*>(addr);
+        int* q = reinterpret_cast<int*>(p);
+        *q = m;
+        p = reinterpret_cast<void*>(reinterpret_cast<unsigned long>(p) + sizeof(int));
 
         printf("p= %p, %s() is called at %s:%d \n", p, __func__, __FILE__, __LINE__);
 
@@ -57,10 +61,9 @@ void* MemoryManager::allocate(size_t sz)
     return nullptr;
 }
 
-void MemoryManager::allocateMemory(Node* p, size_t pages, Node*& rt)
+void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
 {
-
-    if (!p || rt)
+    if (!p || addr)
     {
         return;
     }
@@ -68,9 +71,8 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, Node*& rt)
     if (!p->leaf)
     {
         printf("pages:%d, %s() is called at %s:%d \n", (int)pages,  __func__, __FILE__, __LINE__);
-
-        allocateMemory(p->left, pages, rt);
-        allocateMemory(p->right, pages, rt);
+        allocateMemory(p->left, pages, addr);
+        allocateMemory(p->right, pages, addr);
     }
     else
     {
@@ -80,15 +82,19 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, Node*& rt)
                    (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
             return;
         }
-        // printf("%s() is called at %s:%d \n", __func__, __FILE__, __LINE__);
-        // split the node
 
-        if (p->pages >= pages)
+        // split the node
+        if (p->pages == pages)
+        {
+            addr = p->addr;
+            p->used = true;
+        }
+        else if(p->pages > pages)
         {
             printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
                    (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
 
-            rt = p;
+            addr = p->addr;
             splitNode(p, pages);
         }
     }
@@ -101,30 +107,29 @@ void MemoryManager::splitNode(Node* p, size_t n)
         return;
     }
 
-
     Node* left = new Node();
     Node* right = new Node();
     left->pages = p->pages / 2;
     right->pages = p->pages - left->pages;
 
     left->addr = p->addr;
-    right->addr = p->addr + left->addr * m_PAGE_SIZE;
+    right->addr = p->addr + left->pages * m_PAGE_SIZE;
+
     p->leaf = false;
     p->used = true;
     p->left = left;
     p->right = right;
+    p->addr = right->addr;
 
-    printf("pages: %d, Node is split into two sub nodes, left:%p, right:%p, %s() at %s:%d \n",
-           (int)p->pages, left, right, __func__, __FILE__, __LINE__);
-
+    printf("pages: %5d, Node:%p is split into two sub nodes, left:%p(addr:%lx), right:%p(addr:%lx), %s() at %s:%d \n",
+           (int)p->pages, p,  left, left->addr,
+           right, right->addr, __func__, __FILE__, __LINE__);
 
     if (n == left->pages)
     {
         left->used = true;
-        return;
     }
-
-    if (n < left->pages)
+    else if (n < left->pages)
     {
         splitNode(left, n);
     }
@@ -134,16 +139,18 @@ void MemoryManager::splitNode(Node* p, size_t n)
         splitNode(right, n - left->pages);
     }
 }
-void MemoryManager::deallocate(const void* ptr)
+void MemoryManager::deallocate(void* ptr)
 {
-    void* p = reinterpret_cast<void*>(reinterpret_cast<long>(ptr) - sizeof(long));
-    long q = reinterpret_cast<long>(p);
-    size_t pages = q;
+    void* p = reinterpret_cast<void*>(reinterpret_cast<unsigned long>(ptr) - sizeof(int));
+    int* q = reinterpret_cast<int*>(p);
+    size_t pages = *q;
 
-    deallocateMemory(nullptr, m_pRoot, reinterpret_cast<long>(p), pages);
+    deallocateMemory(nullptr, m_pRoot, reinterpret_cast<unsigned long>(p), pages);
+    printf("pages: %d,  p: %p,  %s() at %s:%d \n",
+           (int)pages, p,   __func__, __FILE__, __LINE__);
 }
 
-void MemoryManager::deallocateMemory(Node* pp, Node* p, long addr, size_t pages)
+void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size_t pages)
 {
     if (!p)
     {
@@ -152,7 +159,7 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, long addr, size_t pages)
 
     if (!p->leaf)
     {
-        if (addr <= p->addr)
+        if (addr < p->addr)
         {
             deallocateMemory(p, p->left, addr, pages);
         }
@@ -163,7 +170,10 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, long addr, size_t pages)
     }
     else
     {
-        if (p->addr == addr)
+        printf("pages: %d, release node:%p, p->addr:0x%lx, addr:0x%lx  %s() at %s:%d \n",
+               (int)p->pages, p, p->addr, addr,  __func__, __FILE__, __LINE__);
+
+        if(p->used && p->addr == addr)
         {
             // find the node we allocated the memory from it
             assert(p->used);
@@ -171,7 +181,7 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, long addr, size_t pages)
 
             if (pages > p->pages)
             {
-                long addr = p->addr + p->pages * m_PAGE_SIZE;
+                unsigned long addr = p->addr + p->pages * m_PAGE_SIZE;
                 if (pp)
                 {
                     deallocateMemory(pp, pp->right, addr, pages - p->pages);
@@ -188,11 +198,12 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, long addr, size_t pages)
     {
         // remove two child kids;
         p->addr = p->left->addr;
-        p->size = p->left->size + p->right->size;
+        p->pages = p->left->pages + p->right->pages;
         p->leaf = true;
         p->used = false;
 
-        printf("two sub nodes are merged into one node, %s() at %s:%d \n", __func__, __FILE__, __LINE__);
+        printf("two sub nodes are merged into one node, %s() at %s:%d \n",
+               __func__, __FILE__, __LINE__);
         delete p->left;
         delete p->right;
     }
@@ -204,7 +215,7 @@ int main()
     MemoryManager memManager(size);
 
     std::vector<void*> memVec;
-    int n = 2;
+    int n = 10;
     for (int i = 0; i < n; i++)
     {
         auto p = memManager.allocate(4096);
@@ -219,6 +230,7 @@ int main()
 
     for (int i = 0; i < memVec.size(); i++)
     {
+        //printf("deallocate memory address : %p \n", memVec[i]);
         memManager.deallocate(memVec[i]);
     }
 }
