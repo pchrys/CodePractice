@@ -3,6 +3,7 @@
 #include <cassert>
 #include <vector>
 #include <cstring>
+#include <random>
 
 #include "MemoryManager.h"
 
@@ -15,8 +16,8 @@ MemoryManager::MemoryManager(size_t sz)
     r = r ? 1 : 0;
     int m = (n + r) * m_PAGE_SIZE;
 
-    void* p = malloc(n);
-    memset(p, 0x0, n);
+    void* p = malloc(m);
+    memset(p, 0x0, m);
 
     m_addr = reinterpret_cast<unsigned long>(p);
     m_size = m;
@@ -53,10 +54,11 @@ void* MemoryManager::allocate(size_t sz)
         *q = m;
         p = reinterpret_cast<void*>(reinterpret_cast<unsigned long>(p) + sizeof(int));
 
-        printf("p= %p, %s() is called at %s:%d \n", p, __func__, __FILE__, __LINE__);
-
         return p;
     }
+
+    printf("Memory is exhausted, and cannot allocate required memory inside %s() at %s:%d \n",
+           __func__, __FILE__, __LINE__);
 
     return nullptr;
 }
@@ -70,7 +72,7 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
 
     if (!p->leaf)
     {
-        printf("pages:%d, %s() is called at %s:%d \n", (int)pages,  __func__, __FILE__, __LINE__);
+        //printf("pages:%d, %s() is called at %s:%d \n", (int)pages,  __func__, __FILE__, __LINE__);
         allocateMemory(p->left, pages, addr);
         allocateMemory(p->right, pages, addr);
     }
@@ -78,11 +80,13 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
     {
         if (p->used)
         {
-            printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
-                   (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
+            // printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
+            //        (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
+
             return;
         }
 
+        std::lock_guard<std::recursive_mutex> lg(m_mutex);
         // split the node
         if (p->pages == pages)
         {
@@ -91,8 +95,9 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
         }
         else if(p->pages > pages)
         {
-            printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
-                   (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
+
+            // printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
+            //        (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
 
             addr = p->addr;
             splitNode(p, pages);
@@ -106,6 +111,8 @@ void MemoryManager::splitNode(Node* p, size_t n)
     {
         return;
     }
+
+    std::lock_guard<std::recursive_mutex> lg(m_mutex);
 
     Node* left = new Node();
     Node* right = new Node();
@@ -170,9 +177,6 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
     }
     else
     {
-        printf("pages: %d, release node:%p, p->addr:0x%lx, addr:0x%lx  %s() at %s:%d \n",
-               (int)p->pages, p, p->addr, addr,  __func__, __FILE__, __LINE__);
-
         if(p->used && p->addr == addr)
         {
             // find the node we allocated the memory from it
@@ -194,6 +198,7 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
         }
     }
 
+    std::lock_guard<std::recursive_mutex> lg(m_mutex);
     if (p->left != nullptr && p->left->used == false && p->right != nullptr && p->right->used == false)
     {
         // remove two child kids;
@@ -203,7 +208,8 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
         p->used = false;
 
         printf("two sub nodes are merged into one node, %s() at %s:%d \n",
-               __func__, __FILE__, __LINE__);
+                __func__, __FILE__, __LINE__);
+
         delete p->left;
         delete p->right;
     }
@@ -211,11 +217,11 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
 
 int main()
 {
-    int size = 4096 * 1024;
+    int size = 4096 * 1024*256;
     MemoryManager memManager(size);
 
     std::vector<void*> memVec;
-    int n = 10;
+    int n = 512;
     for (int i = 0; i < n; i++)
     {
         auto p = memManager.allocate(4096);
@@ -233,4 +239,31 @@ int main()
         //printf("deallocate memory address : %p \n", memVec[i]);
         memManager.deallocate(memVec[i]);
     }
+
+
+    std::default_random_engine e;
+    e.seed(1);
+    std::uniform_int_distribution<unsigned> u(1, 1024);
+
+    int q = 500;
+    for(int i = 0; i < q; i++)
+    {
+        unsigned int sz = u(e);
+        sz = sz*4096;
+
+        auto p = memManager.allocate(4096);
+        memVec.push_back(p);
+
+    }
+    for (int i = 0; i < memVec.size(); i++)
+    {
+        printf("memory address : %p \n", memVec[i]);
+    }
+
+    for (int i = 0; i < memVec.size(); i++)
+    {
+        //printf("deallocate memory address : %p \n", memVec[i]);
+        memManager.deallocate(memVec[i]);
+    }
+
 }

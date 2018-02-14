@@ -1,6 +1,7 @@
 #ifndef MEMORY_MANAGER_H
 #define MEMORY_MANAGER_H
 
+#include <mutex>
 class MemoryManager
 {
 private:
@@ -46,6 +47,8 @@ private:
     unsigned long m_addr;
     size_t m_size;
     static const size_t m_PAGE_SIZE = 4096;
+
+    std::recursive_mutex m_mutex;
 };
 
 #endif
