@@ -73,6 +73,7 @@ private:
     void splitNode(Node* p, size_t n);
 
     Node* m_pRoot;
+    int m_nodeNum = 0;
     unsigned long m_addr;
     static const size_t m_PAGE_SIZE = 4096;
 

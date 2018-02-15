@@ -23,18 +23,21 @@ MemoryManager::MemoryManager(size_t sz)
     m_addr = reinterpret_cast<unsigned long>(p);
 
     void* q = malloc(sizeof(Node));
-    new(q) Node;
+    new(q) Node;  //placement new, create Node object
 
     m_pRoot = reinterpret_cast<Node*>(q);
     m_pRoot->addr = m_addr;
     m_pRoot->pages = (n + r);
 
     m_unusedNodes.emplace(m_pRoot->addr, m_pRoot);
+    m_nodeNum++;
 }
 
 MemoryManager::~MemoryManager()
 {
-    void* p = reinterpret_cast<void*>(m_addr);
+    //void* p = reinterpret_cast<void*>(m_addr);
+    void* p = reinterpret_cast<void*>(m_pRoot->addr);
+    printf("total node number in the tree: %d, %s() at %s:%d \n", m_nodeNum, __func__, __FILE__, __LINE__);
     free(p);
     m_pRoot = nullptr;
 }
@@ -91,7 +94,6 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
         }
 
         std::lock_guard<std::recursive_mutex> lg(m_mutex);
-        // split the node
         if (p->pages == pages)
         {
             addr = p->addr;
@@ -101,20 +103,19 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
                p->addr, __func__, __FILE__, __LINE__);
 
         }
+        // split the node
         else if(p->pages > pages)
         {
-            // printf("p->pages:%d, pages:%d, node:%p,  %s() is called at %s:%d \n",
-            //        (int)p->pages, (int)pages,  p, __func__, __FILE__, __LINE__);
-
             addr = p->addr;
             p->leaf = false;
             p->used = true;
-            splitNode(p, pages);
 
+            //we have to remove p before splitting the node, since left node inherits addr from parernt node
             m_unusedNodes.erase(p->addr);
-            printf("remove:0x%lx removed from  dictionary, %s() at %s:%d \n",
-               p->addr, __func__, __FILE__, __LINE__);
 
+            printf("removed node: %p, p->pages:%d, pages:%d, addr: 0x%lx,  %s() is called at %s:%d \n",
+                   p, (int)p->pages, (int)pages,  p->addr, __func__, __FILE__, __LINE__);
+            splitNode(p, pages);
         }
 #if 1
         else
@@ -123,8 +124,8 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
             auto it = m_unusedNodes.find(p->addr);
             if(it == m_unusedNodes.end())
             {
-                printf("error, could not find unused node: 0x%lx, %s() at %s:%d \n",
-                       p->addr, __func__, __FILE__, __LINE__);
+                printf("error, could not find unused node: %p, p->addr: 0x%lx, p->pages: %d, requested pages: %d,  %s() at %s:%d \n",
+                       p, p->addr, (int)p->pages, (int)pages,   __func__, __FILE__, __LINE__);
 
                 return;
             }
@@ -148,7 +149,6 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
                 {
                     break;
                 }
-
             }
 
             if(u <= 0)
@@ -157,6 +157,7 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
                 addr = p->addr;
                 p->used = true;
                 int v = pages - p->pages;
+                printf("node: %p marked as used, %s() at %s:%d \n", p, __func__, __FILE__, __LINE__);
 
                 std::vector<unsigned long> iVec;
                 iVec.push_back(p->addr);
@@ -164,11 +165,13 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
                 auto it = m_unusedNodes.find(p->addr);
                 it++;
 
+                Node* pNode = nullptr;
                 for(; it != m_unusedNodes.end(); it++)
                 {
                     iVec.push_back( it->second->addr);
                     it->second->used = true;
 
+                    printf("node: %p marked as used, %s() at %s:%d \n", it->second, __func__, __FILE__, __LINE__);
                     v -= it->second->pages;
 
                     if(v == 0)
@@ -178,8 +181,8 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
                     else if(v < 0)
                     {
                         v += it->second->pages;
-                        splitNode(it->second, v);
-
+                        //splitNode(it->second, v);
+                        pNode = it->second;
                         break;
                     }
                 }
@@ -189,8 +192,9 @@ void MemoryManager::allocateMemory(Node* p, size_t pages, unsigned long &addr)
                     m_unusedNodes.erase(key);
                     printf("remove:0x%lx added into dictionary, %s() at %s:%d \n",
                             key, __func__, __FILE__, __LINE__);
-
                 }
+
+                splitNode(pNode, v);
             }
         }
 #endif
@@ -227,15 +231,16 @@ void MemoryManager::splitNode(Node* p, size_t n)
     p->used = true;
     p->left = left;
     p->right = right;
-    p->addr = right->addr;
+    p->addr = right->addr - 1; //as a key for binary search
+    m_nodeNum +=2 ;
 
     printf("pages: %5d, n: %d, Node:%p is split into two sub nodes, left:%p(addr: 0x%lx), right:%p(addr: 0x%lx), %s() at %s:%d \n",
            (int)p->pages, (int)n, p,  left, left->addr,
            right, right->addr, __func__, __FILE__, __LINE__);
 
+    left->used = true;
     if (n == left->pages)
     {
-        left->used = true;
         m_unusedNodes.emplace(right->addr, right);
 
         printf("add:0x%lx added into dictionary, %s() at %s:%d \n",
@@ -247,16 +252,20 @@ void MemoryManager::splitNode(Node* p, size_t n)
         printf("add:0x%lx added into dictionary, %s() at %s:%d \n",
                right->addr, __func__, __FILE__, __LINE__);
 
-     splitNode(left, n);
+        splitNode(left, n);
     }
     else
     {
-        left->used = true;
+        right->used = true;
         splitNode(right, n - left->pages);
     }
 }
 void MemoryManager::deallocate(void* ptr)
 {
+    if(!ptr)
+    {
+        return;
+    }
     void* p = reinterpret_cast<void*>(reinterpret_cast<unsigned long>(ptr) - sizeof(int));
     int* q = reinterpret_cast<int*>(p);
     size_t pages = *q;
@@ -289,16 +298,19 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
     {
         if(p->used && p->addr == addr)
         {
-            // find the node we allocated the memory from it
+            // find the node where we allocated memory
             assert(p->used);
             p->used = false;
-            m_unusedNodes.emplace(p->addr, p);
+            m_unusedNodes[p->addr] = p;
+
+            printf("node: %p marked as unused, %s() at %s:%d \n", p, __func__, __FILE__, __LINE__);
+
             if (pages > p->pages)
             {
                 unsigned long addr = p->addr + p->pages * m_PAGE_SIZE;
                 if (pp)
                 {
-                    deallocateMemory(pp, pp->right, addr, pages - p->pages);
+                    deallocateMemory(nullptr, m_pRoot, addr, pages - p->pages);
                 }
                 else
                 {
@@ -307,6 +319,8 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
             }
         }
     }
+
+    printf("return path, node: %p, %s() at %s:%d \n", p, __func__, __FILE__, __LINE__);
 
     std::lock_guard<std::recursive_mutex> lg(m_mutex);
     if (p->left != nullptr && p->left->used == false && p->right != nullptr && p->right->used == false)
@@ -317,15 +331,16 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
         p->leaf = true;
         p->used = false;
 
-        // printf("two sub nodes are merged into one node, %s() at %s:%d \n",
-        //         __func__, __FILE__, __LINE__);
+        printf("two sub nodes are merged into one node, p:%p, left:%p, right:%p, pages:(p,l,r)=(%d, %d, %d), %s() at %s:%d \n",
+               p, p->left, p->right, (int)p->pages, (int)p->left->pages, (int)p->right->pages,
+               __func__, __FILE__, __LINE__);
 
         m_unusedNodes.erase(p->left->addr);
-                    printf("remove:0x%lx added into dictionary, %s() at %s:%d \n",
+        printf("remove:0x%lx from dictionary, %s() at %s:%d \n",
                p->left->addr, __func__, __FILE__, __LINE__);
 
         m_unusedNodes.erase(p->right->addr);
-            printf("remove:0x%lx added into dictionary, %s() at %s:%d \n",
+        printf("remove:0x%lx from dictionary, %s() at %s:%d \n",
                p->right->addr, __func__, __FILE__, __LINE__);
         m_unusedNodes.emplace(p->addr, p);
 
@@ -334,6 +349,8 @@ void MemoryManager::deallocateMemory(Node* pp, Node* p, unsigned long addr, size
 
         free(p->left);
         free(p->right);
+        m_nodeNum -= 2;
+
     }
 }
 
@@ -366,11 +383,14 @@ void operator delete[](void* ptr)
 //#undef DEBUG
 int main()
 {
+    //unsigned long size = 4096 * 1024*256;
     unsigned long size = 4096 * 1024*256;
 
     MemoryManager memManager(size);
 
     std::vector<void*> memVec;
+
+#if 0
     int n = 512;
     for (int i = 0; i < n; i++)
     {
@@ -399,23 +419,28 @@ int main()
     }
 
     memVec.clear();
+#endif
 
     std::default_random_engine e;
     e.seed(1);
     std::uniform_int_distribution<unsigned> u(1, 32);
 
-    int q = 100;
+    int q = 2000;
     for(int i = 0; i < q; i++)
     {
         unsigned int sz = u(e);
         sz = sz*4096; //4096;
 #ifdef DEBUG
+        printf("memory allocation request, size in pages: %d \n",  (int)sz/4096);
         auto p = memManager.allocate(sz);
 #else
-        auto p = malloc(4096);
+        auto p = malloc(sz);
 #endif
 
-        memVec.push_back(p);
+        if(p)
+        {
+            memVec.push_back(p);
+        }
 
     }
     for (int i = 0; i < memVec.size(); i++)
@@ -425,7 +450,7 @@ int main()
 
     for (int i = 0; i < memVec.size(); i++)
     {
-        //printf("deallocate memory address : %p \n", memVec[i]);
+        printf("deallocate memory address : %p \n", memVec[i]);
 #ifdef DEBUG
         memManager.deallocate(memVec[i]);
 #else
