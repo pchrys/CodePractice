@@ -3,6 +3,7 @@
 
 #include <mutex>
 #include <map>
+#include <unordered_map>
 /**
  * this is a class used to perform memory management.
 
@@ -78,6 +79,7 @@ private:
     unsigned long m_addr;
     static const size_t m_PAGE_SIZE = 4096;
 
+    //we may use hash table to optimize performance
     std::map<unsigned long, Node*> m_unusedNodes;
     std::recursive_mutex m_mutex;
 };
