@@ -69,6 +69,7 @@ public:
 
 private:
     void allocateMemory(Node* p, size_t sz, unsigned long& addr);
+    void allocateMemory(size_t pages, unsigned long& addr);
     void deallocateMemory(Node* pp, Node* p, unsigned long addr, size_t pages);
     void splitNode(Node* p, size_t n);
 
