@@ -134,7 +134,8 @@ void MemoryManager::allocateMemory(size_t pages, unsigned long& addr)
             int u = pages - p->pages;
             for (; it != m_unusedNodes.end(); oit = it, it++)
             {
-                if (!it->second->used && oit->second->addr + oit->second->pages * m_PAGE_SIZE == it->second->addr)
+                assert(!it->second->used);
+                if (oit->second->addr + oit->second->pages * m_PAGE_SIZE == it->second->addr)
                 {
                     u -= it->second->pages;
 
@@ -161,17 +162,16 @@ void MemoryManager::allocateMemory(size_t pages, unsigned long& addr)
                 std::vector<unsigned long> iVec;
                 iVec.push_back(p->addr);
 
-                auto it = m_unusedNodes.find(p->addr);
-                it++;
-
+                auto it2 = m_unusedNodes.find(p->addr);
+                it2++;
                 Node* pNode = nullptr;
-                for (; it != m_unusedNodes.end(); it++)
+                while(true)
                 {
-                    iVec.push_back(it->second->addr);
-                    it->second->used = true;
+                    iVec.push_back(it2->second->addr);
+                    it2->second->used = true;
 
                     //DBG_PRINT("node: %p marked as used, %s() at %s:%d \n", it->second, __func__, __FILE__, __LINE__);
-                    v -= it->second->pages;
+                    v -= it2->second->pages;
 
                     if (v == 0)
                     {
@@ -179,11 +179,13 @@ void MemoryManager::allocateMemory(size_t pages, unsigned long& addr)
                     }
                     else if (v < 0)
                     {
-                        v += it->second->pages;
+                        v += it2->second->pages;
                         // splitNode(it->second, v);
-                        pNode = it->second;
+                        pNode = it2->second;
                         break;
                     }
+
+                    it2++;
                 }
 
                 for (auto key : iVec)
@@ -538,14 +540,15 @@ int main()
 
     std::vector<void*> memVec;
 
+    int chunk_size  = 512;
 #if 1
-    int n = 2048;
+    int n = 4096;
     for (int i = 0; i < n; i++)
     {
 #ifdef DEBUG
-        auto p = memManager.allocate(4096);
+        auto p = memManager.allocate(chunk_size);
 #else
-        auto p = malloc(4096);
+        auto p = malloc(chunk_size);
 #endif
         //DBG_PRINT("memory address : %p \n", p);
         memVec.push_back(p);
@@ -577,9 +580,9 @@ int main()
     for (int i = 0; i < q; i++)
     {
         unsigned int sz = u(e);
-        sz = sz * 4096; // 4096;
+        sz = sz * chunk_size; // 4096;
 #ifdef DEBUG
-        DBG_PRINT("memory allocation request, size in pages: %d \n", (int)sz / 4096);
+        DBG_PRINT("memory allocation request, size in pages: %d \n", (int)sz / chunk_size);
         auto p = memManager.allocate(sz);
 #else
         auto p = malloc(sz);

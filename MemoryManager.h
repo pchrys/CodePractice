@@ -19,6 +19,13 @@ left sub nodes; if the requested size is equal to the left node, return; if
 it is smaller than the left node, continue recursively splitting left node;
 if it is larger then left node, then search right sub-node for remaing size;
 
+If the leaf node is smaller than requested size,  we need search if we have
+free contious memory starting from address p->addr,  which in size is larger
+than requested size, if yes, then allocate memory from this chunk; otherwise,
+skip to next section
+
+
+
 We skip unused leaf nodes which has less memory chunk than we request.
 
 */
