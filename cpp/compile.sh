@@ -12,7 +12,7 @@ base=$(echo $filename | sed -e 's/\..\+//g')
 echo $base
 target=${base}
 
-cmd="g++ --std=c++11 -g ${filename} -o ${target}"
+cmd="g++ --std=c++11 -g ${filename} -lpthread -o ${target}"
 
 echo "cmd: $cmd"
 
