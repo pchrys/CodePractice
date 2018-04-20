@@ -71,7 +71,6 @@ void tProducerConsumer::startProducerAndConsumer()
 
         //futures.push_back(std::async(task1));
         //futures.push_back(std::async(task2));
-
     }
 
     for(auto& t: threads){
