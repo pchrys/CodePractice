@@ -1,0 +1,44 @@
+
+https://stackoverflow.com/questions/6315699/why-are-the-level-fine-logging-messages-not-showing
+
+java.util.logging has a root logger that defaults to Level.INFO, and a ConsoleHandler attached
+to it that also defaults to Level.INFO. FINE is lower than INFO, so fine messages are not
+displayed by default.
+
+Solution 1
+
+Create a logger for your whole application, e.g. from your package name or use Logger.getGlobal(),
+and hook your own ConsoleLogger to it. Then either ask root logger to shut up (to avoid
+duplicate output of higher level messages), or ask your logger to not forward logs to root.
+
+public static final Logger applog = Logger.getGlobal();
+...
+
+// Create and set handler
+Handler systemOut = new ConsoleHandler();
+systemOut.setLevel( Level.ALL );
+applog.addHandler( systemOut );
+applog.setLevel( Level.ALL );
+
+// Prevent logs from processed by default Console handler.
+applog.setUseParentHandlers( false ); // Solution 1
+Logger.getLogger("").setLevel( Level.OFF ); // Solution 2
+
+Solution 2
+
+Alternatively, you may lower the root logger's bar.
+
+You can set them by code:
+
+Logger rootLog = Logger.getLogger("");
+rootLog.setLevel( Level.FINE );
+rootLog.getHandlers()[0].setLevel( Level.FINE ); // Default console handler
+
+Or with logging configuration file, if you are using it:
+
+.level = FINE
+java.util.logging.ConsoleHandler.level = FINE
+
+By lowering the global level, you may start seeing messages from core libraries, such as from
+some Swing or JavaFX components. In this case you may set a Filter on the root logger to
+filter out messages not from your program
