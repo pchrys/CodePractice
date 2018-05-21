@@ -48,6 +48,14 @@ class C
 {
 };
 
+void foo(const B*){
+    printf("drived is called \n");
+}
+
+void foo(A* ){
+    printf("base is called \n");
+}
+
 int main()
 {
     int flag = IsDerivedFrom<A, B>::value;
@@ -58,6 +66,10 @@ int main()
     printf("flag = %d \n", flag);
     flag = IsTheSame<A, B>::value;
     printf("flag = %d \n", flag);
+
+    B objb;
+
+    foo(&objb);
 
     return 0;
 }
