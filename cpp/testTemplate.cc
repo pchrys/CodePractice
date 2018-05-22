@@ -4,8 +4,56 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
+
+class tImageBase
+{
+protected:
+    tImageBase(const uint32_t w = 0, const uint32_t h = 0, const uint32_t d = 0) : m_Width(w), m_Height(h), m_Depth(d) {}
+
+    uint32_t GetPixelLocation(const uint32_t w = 0, const uint32_t h = 0, const uint32_t d = 0) const
+    {
+        if (w >= m_Width || h >= m_Height || d >= m_Depth)
+        {
+            throw std::invalid_argument(std::string("invalid argument (w, h, d) = (") + std::to_string(w) + ", " + std::to_string(h) + "," +
+                                        std::to_string(d) + ")");
+        }
+
+        return d * m_Width * m_Height + m_Height * w + w;
+    }
+
+    uint32_t getImageSize() const { return m_Depth * m_Width * m_Height; }
+
+private:
+    uint32_t m_Width;
+    uint32_t m_Height;
+    uint32_t m_Depth;
+};
 
 
+template <typename P>
+class tImage2 : public tImageBase
+{
+public:
+    using tPixelType = P;
+    // typedef P tPixelType;
+    tImage2(const uint32_t w = 0, const uint32_t h = 0, const uint32_t d = 0) : tImageBase(w, h, d), m_ImageData(w * h * d) {}
+
+    tPixelType GetPixel(const uint32_t w, const uint32_t h, const uint32_t d) const
+    {
+        auto idx = GetPixelLocation(w, h, d);
+        return m_ImageData.at(idx);
+    }
+
+    void SetPixel(const uint32_t w, const uint32_t h, const uint32_t d, const tPixelType& v)
+    {
+        auto idx = GetPixelLocation(w, h, d);
+        m_ImageData.at(idx) = v;
+    }
+
+private:
+    std::vector<tPixelType> m_ImageData;
+};
 
 template <typename P>
 class tImage
@@ -27,8 +75,25 @@ public:
         memset(m_xData.get(), m_ImageSize, 0x0);
     }
 
-    tImage(const tImage& image) = delete;
-    tImage& operator=(const tImage& image) = delete;
+    tImage(const tImage& image)
+    {
+        if (this == &image)
+        {
+            return;
+        }
+
+        m_xData = image.m_xData;
+    };
+
+    tImage& operator=(const tImage& image)
+    {
+        if (this == &image)
+        {
+            return *this;
+        }
+
+        return std::swap(*this, *image);
+    };
 
     ~tImage() {}
 
@@ -54,7 +119,12 @@ private:
 
         if (idx >= m_ImageSize)
         {
-            throw std::out_of_range("out of range error! ");
+            int n = 32;
+            char buf[n];
+            snprintf(buf, n - 1, "run time error(w, h, d)=(%d, %d, %d) inside %s() at %s:%d ", w, h, d, __func__, __FILE__, __LINE__);
+            throw std::out_of_range(buf);
+
+            // throw std::out_of_range("out of range error! ");
         }
 
         return idx;
@@ -76,11 +146,12 @@ private:
 
 int main()
 {
-    tImage<uint32_t> image4(8, 8, 8);
-    tImage<uint16_t> image2(8, 8, 8);
+    tImage2<uint32_t> image4(8, 8, 8);
+    tImage2<uint16_t> image2(8, 8, 8);
 
-    image4.setPixel(7, 7, 7, 123);
-    auto p = image4.getPixel(7, 7, 7);
+    image4.SetPixel(7, 7, 7, 123);
+
+    auto p = image4.GetPixel(7, 7, 7);
 
     //================================format for printf
     printf("p: %u \n", p);
@@ -120,10 +191,11 @@ int main()
 
 
     try
-    {   int n = 512;
+    {
+        int n = 512;
         char buff[n];
-        snprintf(buff, n-1,  "runtime error inside %s() at %s:%d \n", __func__, __FILE__, __LINE__);
-        throw std::runtime_error(buff); //str.c_str());
+        snprintf(buff, n - 1, "runtime error inside %s() at %s:%d \n", __func__, __FILE__, __LINE__);
+        throw std::runtime_error(buff); // str.c_str());
     }
     catch (std::exception& e)
     {
