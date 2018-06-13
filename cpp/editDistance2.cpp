@@ -16,7 +16,6 @@ enum class Op
 
 void ouputOperationSequence(const std::vector<std::vector<std::tuple<Op, int, int>>>& d, int m, int n)
 {
-
     if (m < 1 || n < 1)
     {
         return;
@@ -26,10 +25,14 @@ void ouputOperationSequence(const std::vector<std::vector<std::tuple<Op, int, in
     int j = 0;
     Op editOp;
     std::tie(editOp, i, j) = d[m][n];
+    ouputOperationSequence(d, i, j);
 
     std::string opString;
     switch (editOp)
     {
+    case Op::copy:
+        opString = "copy";
+        break;
     case Op::replace:
         opString = "replace";
         break;
@@ -71,7 +74,7 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
     std::vector<std::vector<std::tuple<Op, int, int>>> d(m + 1);
     for (auto& e : d)
     {
-        d.resize(n + 1);
+        e.resize(n + 1);
     }
 
     // mm[i][j] denotes the edit distance from x[i-1] to y[j-1];
@@ -82,7 +85,7 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
             printf("building dp table (%d, %d) at %s:%d \n", i, j, __FILE__, __LINE__);
 
             std::vector<std::pair<int, Op>> helper;
-            if (x[i - 1] == y[i - 1])
+            if (x[i - 1] == y[j - 1])
             {
                 helper.push_back(std::make_pair(mm[i - 1][j - 1] + opCost[static_cast<size_t>(Op::copy)], Op::copy)); // copy,
             }
@@ -92,24 +95,7 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
                 helper.push_back(std::make_pair(mm[i - 1][j - 1] + opCost[static_cast<size_t>(Op::replace)], Op::replace));
             }
 
-            if (i == j + 1) // transfer x[i] to y[[j] by just removing one character
-            {
-                auto x1 = x.substr(0, i-1);
-                auto y1 = x.substr(0, j);
-
-                auto it1 = y1.begin();
-                auto it2 = x1.begin();
-                while (it1 != y.end() && *it1++ == *it2++)
-                {
-                    ;
-                }
-                x1.erase(it2);
-
-                if (x1 == y1)
-                {
-                    helper.push_back(std::make_pair(mm[i + 1][j] + opCost[static_cast<size_t>(Op::insert)], Op::remove));
-                }
-            }
+            helper.push_back(std::make_pair(mm[i- 1][j] + opCost[static_cast<size_t>(Op::remove)], Op::remove));
 
             helper.push_back(std::make_pair(mm[i][j - 1] + opCost[static_cast<size_t>(Op::insert)], Op::insert)); // insert
 
@@ -117,11 +103,30 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
                 helper.begin(), helper.end(), [](const std::pair<int, Op>& a, const std::pair<int, Op>& b) { return a.first < b.first; });
 
             mm[i][j] = it->first;
+
+            switch(it->second){
+            case Op::copy:
+            case Op::replace:
+                d[i][j] = std::make_tuple(it->second, i-1, j-1);
+                break;
+            case Op::remove:
+                d[i][j] = std::make_tuple(it->second, i-1, j);
+                break;
+            case Op::insert:
+                d[i][j] = std::make_tuple(it->second, i, j-1);
+                break;
+            default:
+                printf("operation not supported. \n");
+            }
+
         }
     }
 
+    printf("=============d table===================\n");
 
-    printf("=============mm table===================\n");
+    ouputOperationSequence(d, m, n);
+
+    printf("\n=============mm table===================\n");
     for (const auto& e1 : mm)
     {
         for (const auto e2 : e1)
@@ -130,6 +135,8 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
         }
         printf("\n");
     }
+
+
     return mm[m][n];
 }
 
@@ -150,8 +157,8 @@ int editDistance(const std::string& x, const std::string& y)
 
 int main()
 {
-    const std::string x{"ho"};
-    const std::string y{"o"};
+    const std::string x{"hor"};
+    const std::string y{"or"};
 
     const int ed = editDistance(x, y);
     printf("ed: %d \n", ed);

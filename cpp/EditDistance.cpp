@@ -78,7 +78,7 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
     std::vector<std::vector<std::tuple<Op, int, int>>> d(m + 1);
     for (auto& e : d)
     {
-        d.resize(n + 1);
+        e.resize(n + 1);
     }
 
     // mm[i][j] denotes the edit distance from x[i-1] to y[j-1];
@@ -89,7 +89,7 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
             printf("building dp table (%d, %d) at %s:%d \n", i, j, __FILE__, __LINE__);
 
             std::vector<std::pair<int, Op>> helper;
-            if (x[i - 1] == y[i - 1])
+            if (x[i - 1] == y[j - 1])
             {
                 helper.push_back(std::make_pair(mm[i - 1][j - 1] + opCost[static_cast<size_t>(Op::copy)], Op::copy)); // copy,
             }
@@ -99,17 +99,7 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
                 helper.push_back(std::make_pair(mm[i - 1][j - 1] + opCost[static_cast<size_t>(Op::replace)], Op::replace));
             }
 
-            if (x[i - 1] == y[j - 1])
-            {
-                // helper.push_back(std::make_pair(mm[i-1][j-2] + mm[i + 1][j] + opCost[static_cast<size_t>(Op::remove)], Op::remove)); //
-                // remove
-                // cost for this operation is larger than others
-                // helper.push_back(std::make_pair(mm[i-1][j-2] + opCost[static_cast<size_t>(Op::remove)]
-                //                                 + opCost[static_cast<size_t>(Op::remove)], Op::remove)); // remove
-
-                // we dont conside this case since it is obvious larger than m[i][j]
-            }
-
+            helper.push_back(std::make_pair(mm[i-1][j] + opCost[static_cast<size_t>(Op::remove)], Op::remove)); // remove
             helper.push_back(std::make_pair(mm[i][j - 1] + opCost[static_cast<size_t>(Op::insert)], Op::insert)); // insert
 
             if (i >= 2 && j >= 2 && x[i - 2] == y[j - 1] && x[i - 1] == y[j - 2])
@@ -136,48 +126,27 @@ int editDistance(const std::string& x, const std::string& y, const std::vector<i
 
             mm[i][j] = it->first;
 
-            // switch (it->second)
-            // {
-            // case Op::copy:
-            //     break;
-            // case Op::replace:
-            //     d[i][j] = std::make_tuple(it->second, i - 1, j - 1);
-            //     break;
-            // case Op::insert:
-            //     d[i][j] = std::make_tuple(it->second, i, j - 1);
-            //     break;
-            // case Op::remove:
-            //     break;
-            // case Op::twiddle:
-            //     d[i][j] = std::make_tuple(it->second, i - 2, j - 2);
-            //     break;
-            // case Op::kill:
-            //     d[i][j] = std::make_tuple(it->second, dst + 1, j);
-            //     break;
-            // default:
-            //     printf("unsupported operation \n");
-            // }
-
-            // if (it->second == Op::copy || it->second == Op::replace)
-            // {
-            //     d[i][j] = {i-1, j-1};
-            // }
-            // else if (it->second == Op::insert)
-            // {
-            //     d[i][j] = {i, j-1};
-            // }
-            // else if (it->second == Op::remove)
-            // {
-            //     d[i][j] = {i+1, j};
-            // }
-            // else if (it->second == Op::twiddle)
-            // {
-            //     d[i][j] = {i-2, j-2};
-            // }
-            // else if (it->second == Op::kill)
-            // {
-            //     d[i][j] = {dst + 1, j};
-            // }
+            switch (it->second)
+            {
+            case Op::copy:
+            case Op::replace:
+                d[i][j] = std::make_tuple(it->second, i - 1, j - 1);
+                break;
+            case Op::insert:
+                d[i][j] = std::make_tuple(it->second, i, j - 1);
+                break;
+            case Op::remove:
+                d[i][j] = std::make_tuple(it->second, i-1, j);
+                break;
+            case Op::twiddle:
+                d[i][j] = std::make_tuple(it->second, i - 2, j - 2);
+                break;
+            case Op::kill:
+                d[i][j] = std::make_tuple(it->second, dst + 1, j);
+                break;
+            default:
+                printf("unsupported operation \n");
+            }
         }
     }
 
@@ -209,8 +178,8 @@ int editDistance(const std::string& x, const std::string& y)
 
 int main()
 {
-    const std::string x{"good"};
-    const std::string y{"god"};
+    const std::string x{"hor"};
+    const std::string y{"or"};
 
     const int ed = editDistance(x, y);
     printf("ed: %d \n", ed);
